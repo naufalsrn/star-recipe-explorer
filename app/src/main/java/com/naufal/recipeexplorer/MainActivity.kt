@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
             RecipeExplorerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
-                        name = "Android",
+                        name = "Naufal",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
