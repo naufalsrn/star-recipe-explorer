@@ -1,6 +1,5 @@
 package com.naufal.recipeexplorer.ui.list
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,42 +25,54 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.naufal.recipeexplorer.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.naufal.recipeexplorer.data.model.Recipe
+import com.naufal.recipeexplorer.ui.components.ErrorState
+import com.naufal.recipeexplorer.ui.components.NetworkImage
 import com.naufal.recipeexplorer.ui.theme.BrandGreen
 import com.naufal.recipeexplorer.ui.theme.Cream
 import com.naufal.recipeexplorer.ui.theme.SageGreen
 
 @Composable
-fun RecipeListScreen(recipes: List<Recipe> = sampleRecipes) {
-    var query by rememberSaveable { mutableStateOf("") }
-    val visibleRecipes = recipes.filter { it.name.contains(query.trim(), ignoreCase = true) }
+fun RecipeListScreen(viewModel: RecipeListViewModel = viewModel(factory = RecipeListViewModel.Factory)) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    RecipeListContent(
+        state = state,
+        onQueryChange = viewModel::onQueryChange,
+        onRetry = viewModel::retry,
+    )
+}
 
+@Composable
+private fun RecipeListContent(
+    state: RecipeListUiState,
+    onQueryChange: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,21 +85,43 @@ fun RecipeListScreen(recipes: List<Recipe> = sampleRecipes) {
         }
 
         SearchBar(
-            query = query,
-            onQueryChange = { query = it },
+            query = state.query,
+            onQueryChange = onQueryChange,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
         )
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            items(visibleRecipes, key = { it.id }) { recipe ->
-                RecipeCard(recipe)
+        // A new search is loading while the previous results are still shown.
+        if (state.isLoading && state.recipes.isNotEmpty()) {
+            LinearProgressIndicator(color = BrandGreen, modifier = Modifier.fillMaxWidth())
+        }
+
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            when {
+                state.recipes.isNotEmpty() -> RecipeGrid(state.recipes)
+                state.isLoading -> CircularProgressIndicator(color = BrandGreen)
+                state.error != null -> ErrorState(message = state.error, onRetry = onRetry)
+                else -> Text(
+                    text = "No recipes found for \"${state.query.trim()}\".",
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(32.dp),
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun RecipeGrid(recipes: List<Recipe>) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(recipes, key = { it.id }) { recipe ->
+            RecipeCard(recipe)
         }
     }
 }
@@ -139,15 +172,11 @@ private fun RecipeCard(recipe: Recipe) {
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        // Image area. A faded logo stands in until real images are loaded.
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.dishdiscover_logo),
-                contentDescription = null,
-                modifier = Modifier.fillMaxWidth(0.5f).alpha(0.25f),
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+            NetworkImage(
+                url = recipe.image,
+                contentDescription = recipe.name,
+                modifier = Modifier.fillMaxSize(),
             )
             DifficultyLabel(
                 difficulty = recipe.difficulty,
@@ -155,7 +184,6 @@ private fun RecipeCard(recipe: Recipe) {
             )
         }
 
-        // Green info panel with rounded top corners, as in the design.
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
@@ -210,10 +238,4 @@ private fun DifficultyLabel(difficulty: String, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun RecipeListScreenPreview() {
-    RecipeListScreen()
 }
