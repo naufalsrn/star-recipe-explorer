@@ -29,7 +29,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,12 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.naufal.recipeexplorer.data.model.Recipe
+import com.naufal.recipeexplorer.ui.components.DifficultyLabel
 import com.naufal.recipeexplorer.ui.components.ErrorState
 import com.naufal.recipeexplorer.ui.components.NetworkImage
 import com.naufal.recipeexplorer.ui.theme.BrandGreen
@@ -58,12 +57,16 @@ import com.naufal.recipeexplorer.ui.theme.Cream
 import com.naufal.recipeexplorer.ui.theme.SageGreen
 
 @Composable
-fun RecipeListScreen(viewModel: RecipeListViewModel = viewModel(factory = RecipeListViewModel.Factory)) {
+fun RecipeListScreen(
+    onRecipeClick: (Int) -> Unit,
+    viewModel: RecipeListViewModel = viewModel(factory = RecipeListViewModel.Factory),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     RecipeListContent(
         state = state,
         onQueryChange = viewModel::onQueryChange,
         onRetry = viewModel::retry,
+        onRecipeClick = onRecipeClick,
     )
 }
 
@@ -72,6 +75,7 @@ private fun RecipeListContent(
     state: RecipeListUiState,
     onQueryChange: (String) -> Unit,
     onRetry: () -> Unit,
+    onRecipeClick: (Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -97,7 +101,7 @@ private fun RecipeListContent(
 
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             when {
-                state.recipes.isNotEmpty() -> RecipeGrid(state.recipes)
+                state.recipes.isNotEmpty() -> RecipeGrid(state.recipes, onRecipeClick)
                 state.isLoading -> CircularProgressIndicator(color = BrandGreen)
                 state.error != null -> ErrorState(message = state.error, onRetry = onRetry)
                 else -> Text(
@@ -112,7 +116,7 @@ private fun RecipeListContent(
 }
 
 @Composable
-private fun RecipeGrid(recipes: List<Recipe>) {
+private fun RecipeGrid(recipes: List<Recipe>, onRecipeClick: (Int) -> Unit) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
@@ -121,7 +125,7 @@ private fun RecipeGrid(recipes: List<Recipe>) {
         modifier = Modifier.fillMaxSize(),
     ) {
         items(recipes, key = { it.id }) { recipe ->
-            RecipeCard(recipe)
+            RecipeCard(recipe, onClick = { onRecipeClick(recipe.id) })
         }
     }
 }
@@ -166,8 +170,9 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit, modifier: 
 }
 
 @Composable
-private fun RecipeCard(recipe: Recipe) {
+private fun RecipeCard(recipe: Recipe, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -220,22 +225,5 @@ private fun RecipeCard(recipe: Recipe) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DifficultyLabel(difficulty: String, modifier: Modifier = Modifier) {
-    val color = when (difficulty.lowercase()) {
-        "easy" -> Color(0xFF2E7D32)
-        "medium" -> Color(0xFFF27A1A)
-        else -> Color(0xFFC62828)
-    }
-    Surface(color = color, contentColor = Color.White, shape = RoundedCornerShape(50), modifier = modifier) {
-        Text(
-            text = difficulty,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
     }
 }

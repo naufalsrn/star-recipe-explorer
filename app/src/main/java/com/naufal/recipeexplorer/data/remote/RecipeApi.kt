@@ -21,6 +21,10 @@ class RecipeApi(private val baseUrl: String = "https://dummyjson.com") {
         return parseRecipes(HttpClient.getText("$baseUrl/recipes/search?q=$q&limit=0"))
     }
 
+    /** GET /recipes/{id} */
+    suspend fun getRecipe(id: Int): Recipe =
+        JSONObject(HttpClient.getText("$baseUrl/recipes/$id")).toRecipe()
+
     private fun parseRecipes(body: String): List<Recipe> {
         val array = JSONObject(body).getJSONArray("recipes")
         return List(array.length()) { i -> array.getJSONObject(i).toRecipe() }
