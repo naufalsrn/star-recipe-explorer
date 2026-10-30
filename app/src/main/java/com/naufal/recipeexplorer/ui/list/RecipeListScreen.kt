@@ -1,6 +1,9 @@
 package com.naufal.recipeexplorer.ui.list
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +29,14 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -65,15 +72,20 @@ fun RecipeListScreen(
     RecipeListContent(
         state = state,
         onQueryChange = viewModel::onQueryChange,
+        onDifficultySelected = viewModel::onDifficultySelected,
+        onRefresh = viewModel::refresh,
         onRetry = viewModel::retry,
         onRecipeClick = onRecipeClick,
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecipeListContent(
     state: RecipeListUiState,
     onQueryChange: (String) -> Unit,
+    onDifficultySelected: (String?) -> Unit,
+    onRefresh: () -> Unit,
     onRetry: () -> Unit,
     onRecipeClick: (Int) -> Unit,
 ) {
@@ -91,7 +103,13 @@ private fun RecipeListContent(
         SearchBar(
             query = state.query,
             onQueryChange = onQueryChange,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 8.dp),
+        )
+
+        DifficultyFilter(
+            difficulties = state.difficulties,
+            selected = state.selectedDifficulty,
+            onSelect = onDifficultySelected,
         )
 
         // A new search is loading while the previous results are still shown.
@@ -99,20 +117,97 @@ private fun RecipeListContent(
             LinearProgressIndicator(color = BrandGreen, modifier = Modifier.fillMaxWidth())
         }
 
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        // A refresh failed, but the recipes from before are still shown.
+        if (state.error != null && state.recipes.isNotEmpty()) {
+            Text(
+                text = state.error,
+                color = Color.White,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFC62828))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize(),
+        ) {
             when {
-                state.recipes.isNotEmpty() -> RecipeGrid(state.recipes, onRecipeClick)
-                state.isLoading -> CircularProgressIndicator(color = BrandGreen)
-                state.error != null -> ErrorState(message = state.error, onRetry = onRetry)
-                else -> Text(
-                    text = "No recipes found for \"${state.query.trim()}\".",
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(32.dp),
-                )
+                state.visibleRecipes.isNotEmpty() -> RecipeGrid(state.visibleRecipes, onRecipeClick)
+                state.isLoading -> FullScreenMessage { CircularProgressIndicator(color = BrandGreen) }
+                state.error != null -> FullScreenMessage { ErrorState(message = state.error, onRetry = onRetry) }
+                else -> FullScreenMessage {
+                    Text(
+                        text = when {
+                            state.recipes.isNotEmpty() -> "No ${state.selectedDifficulty} recipes here. Try another difficulty."
+                            state.query.isNotBlank() -> "No recipes found for \"${state.query.trim()}\"."
+                            else -> "No recipes found."
+                        },
+                        color = Color.Black,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(32.dp),
+                    )
+                }
             }
         }
     }
+}
+
+// Scrollable so pull-to-refresh also works when there is no list to pull.
+@Composable
+private fun FullScreenMessage(content: @Composable () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun DifficultyFilter(difficulties: List<String>, selected: String?, onSelect: (String?) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+    ) {
+        DifficultyChip("All", selected = selected == null, onClick = { onSelect(null) })
+        difficulties.forEach { difficulty ->
+            DifficultyChip(
+                label = difficulty,
+                selected = selected == difficulty,
+                // Tapping the selected chip again clears the filter.
+                onClick = { onSelect(if (selected == difficulty) null else difficulty) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DifficultyChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontWeight = FontWeight.SemiBold) },
+        shape = RoundedCornerShape(50),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.White,
+            labelColor = BrandGreen,
+            selectedContainerColor = BrandGreen,
+            selectedLabelColor = Color.White,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = BrandGreen,
+            selectedBorderColor = BrandGreen,
+        ),
+    )
 }
 
 @Composable

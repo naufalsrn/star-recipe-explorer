@@ -21,9 +21,30 @@ import kotlinx.coroutines.launch
 data class RecipeListUiState(
     val recipes: List<Recipe> = emptyList(),
     val query: String = "",
+    // null means "show all difficulties".
+    val selectedDifficulty: String? = null,
     val isLoading: Boolean = false,
+    // Loading started by pull-to-refresh.
+    val isRefreshing: Boolean = false,
     val error: String? = null,
-)
+) {
+    // Difficulty chips, built from the fetched recipes. The selected one is always
+    // kept, so it can still be cleared after a search that has none of it.
+    val difficulties: List<String>
+        get() = (recipes.map { it.difficulty } + listOfNotNull(selectedDifficulty))
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedBy { DIFFICULTY_ORDER.indexOf(it.lowercase()).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
+
+    // The difficulty filter runs on the device, on recipes already fetched.
+    val visibleRecipes: List<Recipe>
+        get() = if (selectedDifficulty == null) recipes
+        else recipes.filter { it.difficulty.equals(selectedDifficulty, ignoreCase = true) }
+
+    private companion object {
+        val DIFFICULTY_ORDER = listOf("easy", "medium", "hard")
+    }
+}
 
 class RecipeListViewModel(private val repository: RecipeRepository) : ViewModel() {
 
@@ -41,20 +62,34 @@ class RecipeListViewModel(private val repository: RecipeRepository) : ViewModel(
         load(delayMs = SEARCH_DEBOUNCE_MS)
     }
 
+    fun onDifficultySelected(difficulty: String?) {
+        _uiState.update { it.copy(selectedDifficulty = difficulty) }
+    }
+
     fun retry() = load()
 
-    private fun load(delayMs: Long = 0) {
+    fun refresh() = load(isRefresh = true)
+
+    private fun load(delayMs: Long = 0, isRefresh: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             delay(delayMs)
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = !isRefresh, isRefreshing = isRefresh, error = null) }
             try {
                 val recipes = repository.getRecipes(_uiState.value.query.trim())
-                _uiState.update { it.copy(recipes = recipes, isLoading = false) }
+                _uiState.update { it.copy(recipes = recipes, isLoading = false, isRefreshing = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(recipes = emptyList(), isLoading = false, error = e.toUserMessage()) }
+                // A failed refresh keeps the recipes already on screen; a failed search clears them.
+                _uiState.update {
+                    it.copy(
+                        recipes = if (isRefresh) it.recipes else emptyList(),
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = e.toUserMessage(),
+                    )
+                }
             }
         }
     }
