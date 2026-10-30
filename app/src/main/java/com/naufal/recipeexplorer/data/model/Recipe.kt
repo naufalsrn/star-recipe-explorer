@@ -1,6 +1,5 @@
 package com.naufal.recipeexplorer.data.model
 
-//declare model based on response api
 data class Recipe(
     val id: Int,
     val name: String,
@@ -13,7 +12,6 @@ data class Recipe(
     val difficulty: String,
     val cuisine: String,
     val caloriesPerServing: Int,
-    val tags: List<String>,
     val mealType: List<String>,
     val rating: Double,
     val reviewCount: Int,

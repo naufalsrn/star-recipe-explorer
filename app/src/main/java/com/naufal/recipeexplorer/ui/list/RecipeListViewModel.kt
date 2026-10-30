@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.naufal.recipeexplorer.RecipeExplorerApplication
 import com.naufal.recipeexplorer.data.RecipeRepository
 import com.naufal.recipeexplorer.data.model.Recipe
+import com.naufal.recipeexplorer.data.model.RecipePage
 import com.naufal.recipeexplorer.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -21,22 +22,20 @@ import kotlinx.coroutines.launch
 data class RecipeListUiState(
     val recipes: List<Recipe> = emptyList(),
     val query: String = "",
-    // null means "show all difficulties".
     val selectedDifficulty: String? = null,
     val isLoading: Boolean = false,
-    // Loading started by pull-to-refresh.
     val isRefreshing: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val endReached: Boolean = false,
     val error: String? = null,
+    val loadMoreError: String? = null,
 ) {
-    // Difficulty chips, built from the fetched recipes. The selected one is always
-    // kept, so it can still be cleared after a search that has none of it.
     val difficulties: List<String>
         get() = (recipes.map { it.difficulty } + listOfNotNull(selectedDifficulty))
             .filter { it.isNotBlank() }
             .distinct()
             .sortedBy { DIFFICULTY_ORDER.indexOf(it.lowercase()).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
 
-    // The difficulty filter runs on the device, on recipes already fetched.
     val visibleRecipes: List<Recipe>
         get() = if (selectedDifficulty == null) recipes
         else recipes.filter { it.difficulty.equals(selectedDifficulty, ignoreCase = true) }
@@ -70,18 +69,55 @@ class RecipeListViewModel(private val repository: RecipeRepository) : ViewModel(
 
     fun refresh() = load(isRefresh = true)
 
+    fun loadNextPage() {
+        val state = _uiState.value
+        if (loadJob?.isActive == true || state.endReached || state.recipes.isEmpty() || state.loadMoreError != null) return
+
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            try {
+                val page = repository.getRecipes(state.query.trim(), PAGE_SIZE, skip = state.recipes.size)
+                _uiState.update {
+                    val recipes = (it.recipes + page.recipes).distinctBy { recipe -> recipe.id }
+                    it.copy(
+                        recipes = recipes,
+                        isLoadingMore = false,
+                        endReached = isLastPage(page, recipes.size),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingMore = false, loadMoreError = e.toUserMessage()) }
+            }
+        }
+    }
+
+    fun retryLoadMore() {
+        _uiState.update { it.copy(loadMoreError = null) }
+        loadNextPage()
+    }
+
     private fun load(delayMs: Long = 0, isRefresh: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             delay(delayMs)
-            _uiState.update { it.copy(isLoading = !isRefresh, isRefreshing = isRefresh, error = null) }
+            _uiState.update {
+                it.copy(isLoading = !isRefresh, isRefreshing = isRefresh, isLoadingMore = false, error = null, loadMoreError = null)
+            }
             try {
-                val recipes = repository.getRecipes(_uiState.value.query.trim())
-                _uiState.update { it.copy(recipes = recipes, isLoading = false, isRefreshing = false) }
+                val page = repository.getRecipes(_uiState.value.query.trim(), PAGE_SIZE, skip = 0)
+                _uiState.update {
+                    it.copy(
+                        recipes = page.recipes,
+                        isLoading = false,
+                        isRefreshing = false,
+                        endReached = isLastPage(page, page.recipes.size),
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // A failed refresh keeps the recipes already on screen; a failed search clears them.
                 _uiState.update {
                     it.copy(
                         recipes = if (isRefresh) it.recipes else emptyList(),
@@ -94,8 +130,12 @@ class RecipeListViewModel(private val repository: RecipeRepository) : ViewModel(
         }
     }
 
+    private fun isLastPage(page: RecipePage, loadedCount: Int) =
+        page.recipes.size < PAGE_SIZE || loadedCount >= page.total
+
     companion object {
         private const val SEARCH_DEBOUNCE_MS = 400L
+        const val PAGE_SIZE = 10
 
         val Factory = viewModelFactory {
             initializer {

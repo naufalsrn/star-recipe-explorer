@@ -1,36 +1,33 @@
 package com.naufal.recipeexplorer.data.remote
 
 import com.naufal.recipeexplorer.data.model.Recipe
+import com.naufal.recipeexplorer.data.model.RecipePage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 
-/**
- * Calls the dummyjson recipe endpoints and turns the JSON responses into
- * [Recipe] objects using the built-in org.json parser.
- */
 class RecipeApi(private val baseUrl: String = "https://dummyjson.com") {
 
-    /** GET /recipes. `limit=0` asks the API for every recipe in one response. */
-    suspend fun getRecipes(): List<Recipe> =
-        parseRecipes(HttpClient.getText("$baseUrl/recipes?limit=0"))
+    suspend fun getRecipes(limit: Int, skip: Int): RecipePage =
+        parsePage(HttpClient.getText("$baseUrl/recipes?limit=$limit&skip=$skip"))
 
-    /** GET /recipes/search?q=.. */
-    suspend fun searchRecipes(query: String): List<Recipe> {
+    suspend fun searchRecipes(query: String, limit: Int, skip: Int): RecipePage {
         val q = URLEncoder.encode(query, "UTF-8")
-        return parseRecipes(HttpClient.getText("$baseUrl/recipes/search?q=$q&limit=0"))
+        return parsePage(HttpClient.getText("$baseUrl/recipes/search?q=$q&limit=$limit&skip=$skip"))
     }
 
-    /** GET /recipes/{id} */
     suspend fun getRecipe(id: Int): Recipe =
         JSONObject(HttpClient.getText("$baseUrl/recipes/$id")).toRecipe()
 
-    private fun parseRecipes(body: String): List<Recipe> {
-        val array = JSONObject(body).getJSONArray("recipes")
-        return List(array.length()) { i -> array.getJSONObject(i).toRecipe() }
+    private fun parsePage(body: String): RecipePage {
+        val json = JSONObject(body)
+        val array = json.getJSONArray("recipes")
+        return RecipePage(
+            recipes = List(array.length()) { i -> array.getJSONObject(i).toRecipe() },
+            total = json.optInt("total"),
+        )
     }
 
-    // "opt" getters return a default instead of crashing if a field is missing.
     private fun JSONObject.toRecipe() = Recipe(
         id = getInt("id"),
         name = optString("name"),
@@ -43,7 +40,6 @@ class RecipeApi(private val baseUrl: String = "https://dummyjson.com") {
         difficulty = optString("difficulty"),
         cuisine = optString("cuisine"),
         caloriesPerServing = optInt("caloriesPerServing"),
-        tags = optJSONArray("tags").toStringList(),
         mealType = optJSONArray("mealType").toStringList(),
         rating = optDouble("rating", 0.0),
         reviewCount = optInt("reviewCount"),

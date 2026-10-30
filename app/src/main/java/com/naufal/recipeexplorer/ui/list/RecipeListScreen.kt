@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,9 +38,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -75,9 +81,13 @@ fun RecipeListScreen(
         onDifficultySelected = viewModel::onDifficultySelected,
         onRefresh = viewModel::refresh,
         onRetry = viewModel::retry,
+        onLoadMore = viewModel::loadNextPage,
+        onRetryLoadMore = viewModel::retryLoadMore,
         onRecipeClick = onRecipeClick,
     )
 }
+
+private const val LOAD_MORE_THRESHOLD = 4
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +97,8 @@ private fun RecipeListContent(
     onDifficultySelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
+    onRetryLoadMore: () -> Unit,
     onRecipeClick: (Int) -> Unit,
 ) {
     Column(
@@ -112,12 +124,10 @@ private fun RecipeListContent(
             onSelect = onDifficultySelected,
         )
 
-        // A new search is loading while the previous results are still shown.
         if (state.isLoading && state.recipes.isNotEmpty()) {
             LinearProgressIndicator(color = BrandGreen, modifier = Modifier.fillMaxWidth())
         }
 
-        // A refresh failed, but the recipes from before are still shown.
         if (state.error != null && state.recipes.isNotEmpty()) {
             Text(
                 text = state.error,
@@ -136,9 +146,17 @@ private fun RecipeListContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             when {
-                state.visibleRecipes.isNotEmpty() -> RecipeGrid(state.visibleRecipes, onRecipeClick)
+                state.visibleRecipes.isNotEmpty() -> RecipeGrid(state, onRecipeClick, onLoadMore, onRetryLoadMore)
                 state.isLoading -> FullScreenMessage { CircularProgressIndicator(color = BrandGreen) }
                 state.error != null -> FullScreenMessage { ErrorState(message = state.error, onRetry = onRetry) }
+                state.recipes.isNotEmpty() && !state.endReached -> FullScreenMessage {
+                    if (state.loadMoreError != null) {
+                        ErrorState(message = state.loadMoreError, onRetry = onRetryLoadMore)
+                    } else {
+                        CircularProgressIndicator(color = BrandGreen)
+                        LaunchedEffect(state.recipes.size) { onLoadMore() }
+                    }
+                }
                 else -> FullScreenMessage {
                     Text(
                         text = when {
@@ -156,7 +174,6 @@ private fun RecipeListContent(
     }
 }
 
-// Scrollable so pull-to-refresh also works when there is no list to pull.
 @Composable
 private fun FullScreenMessage(content: @Composable () -> Unit) {
     Box(
@@ -181,7 +198,6 @@ private fun DifficultyFilter(difficulties: List<String>, selected: String?, onSe
             DifficultyChip(
                 label = difficulty,
                 selected = selected == difficulty,
-                // Tapping the selected chip again clears the filter.
                 onClick = { onSelect(if (selected == difficulty) null else difficulty) },
             )
         }
@@ -211,16 +227,54 @@ private fun DifficultyChip(label: String, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun RecipeGrid(recipes: List<Recipe>, onRecipeClick: (Int) -> Unit) {
+private fun RecipeGrid(
+    state: RecipeListUiState,
+    onRecipeClick: (Int) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetryLoadMore: () -> Unit,
+) {
+    val gridState = rememberLazyGridState()
+
+    val nearBottom by remember {
+        derivedStateOf {
+            val info = gridState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index
+            lastVisible != null && lastVisible >= info.totalItemsCount - 1 - LOAD_MORE_THRESHOLD
+        }
+    }
+    LaunchedEffect(nearBottom, state.recipes.size) {
+        if (nearBottom) onLoadMore()
+    }
+
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Fixed(2),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        items(recipes, key = { it.id }) { recipe ->
+        items(state.visibleRecipes, key = { it.id }) { recipe ->
             RecipeCard(recipe, onClick = { onRecipeClick(recipe.id) })
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ListFooter(state, onRetryLoadMore)
+        }
+    }
+}
+
+@Composable
+private fun ListFooter(state: RecipeListUiState, onRetryLoadMore: () -> Unit) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+        when {
+            state.isLoadingMore -> CircularProgressIndicator(color = BrandGreen, modifier = Modifier.size(32.dp))
+            state.loadMoreError != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(state.loadMoreError, color = Color.Black, fontSize = 13.sp, textAlign = TextAlign.Center)
+                TextButton(onClick = onRetryLoadMore) {
+                    Text("Retry", color = BrandGreen, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            state.endReached -> Text("You've reached the end", color = Color.Black, fontSize = 13.sp)
         }
     }
 }

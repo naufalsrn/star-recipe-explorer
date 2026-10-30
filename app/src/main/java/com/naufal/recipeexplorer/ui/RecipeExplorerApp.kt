@@ -11,7 +11,6 @@ import com.naufal.recipeexplorer.ui.detail.RecipeDetailViewModel.Companion.RECIP
 import com.naufal.recipeexplorer.ui.list.RecipeListScreen
 import com.naufal.recipeexplorer.ui.welcome.WelcomeScreen
 
-/** The app's screens and how to move between them. */
 @Composable
 fun RecipeExplorerApp() {
     val navController = rememberNavController()

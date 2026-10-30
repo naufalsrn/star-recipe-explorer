@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.Constraints
 import com.naufal.recipeexplorer.data.remote.ImageLoader
 import kotlinx.coroutines.CancellationException
 
-/** Shows an image from the internet, with a grey placeholder while it loads. */
 @Composable
 fun NetworkImage(
     url: String,
@@ -34,7 +33,6 @@ fun NetworkImage(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        // Decode the image at roughly the size it will be shown.
         val maxSizePx = listOf(constraints.maxWidth, constraints.maxHeight)
             .filter { it in 1 until Constraints.Infinity }
             .maxOrNull() ?: 1024
@@ -47,7 +45,7 @@ fun NetworkImage(
             try {
                 bitmap = ImageLoader.load(url, maxSizePx)
             } catch (e: CancellationException) {
-                throw e // The image scrolled off screen; stop quietly.
+                throw e
             } catch (e: Exception) {
                 failed = true
             }

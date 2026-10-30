@@ -22,17 +22,14 @@ data class RecipeDetailUiState(
     val recipe: Recipe? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
-    /** Indexes of the ingredients the user has ticked off. */
     val checkedIngredients: Set<Int> = emptySet(),
 )
 
-/** Loads one recipe and remembers which ingredients the user has ticked off. */
 class RecipeDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: RecipeRepository,
 ) : ViewModel() {
 
-    // The recipe id comes from the navigation route, e.g. "recipes/12".
     private val recipeId: Int = checkNotNull(savedStateHandle[RECIPE_ID_ARG])
 
     private val _uiState = MutableStateFlow(RecipeDetailUiState())

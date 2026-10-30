@@ -24,7 +24,6 @@ import org.json.JSONException
 import java.io.IOException
 import java.net.SocketTimeoutException
 
-/** A full-screen error message with a Retry button. */
 @Composable
 fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(
@@ -49,7 +48,6 @@ fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifi
     }
 }
 
-/** Turns a technical exception into a message a user can understand. */
 fun Throwable.toUserMessage(): String = when (this) {
     is SocketTimeoutException -> "The server took too long to respond. Please try again."
     is IOException -> "No internet connection. Check your connection and try again."

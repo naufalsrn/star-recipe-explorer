@@ -78,7 +78,6 @@ fun RecipeDetailScreen(
             else -> CircularProgressIndicator(color = BrandGreen)
         }
 
-        // The back button floats over the photo, so it is drawn last.
         IconButton(
             onClick = onBack,
             modifier = Modifier
@@ -151,25 +150,9 @@ private fun RecipeDetailContent(
                 Text(text = step, fontSize = 15.sp, color = Color.Black, modifier = Modifier.weight(1f))
             }
         }
-
-        if (recipe.tags.isNotEmpty()) {
-            item {
-                Column {
-                    SectionTitle(title = "Tags")
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    ) {
-                        recipe.tags.forEach { tag -> Pill("#$tag") }
-                    }
-                }
-            }
-        }
     }
 }
 
-/** Name, rating and labels on a green panel that overlaps the bottom of the photo. */
 @Composable
 private fun Header(recipe: Recipe) {
     Column(
@@ -200,7 +183,6 @@ private fun Header(recipe: Recipe) {
     }
 }
 
-/** Prep time, cook time, servings and calories at a glance. */
 @Composable
 private fun Stats(recipe: Recipe) {
     Row(

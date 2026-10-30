@@ -11,7 +11,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** A small coloured label: green for Easy, orange for Medium, red for Hard. */
 @Composable
 fun DifficultyLabel(difficulty: String, modifier: Modifier = Modifier) {
     val color = when (difficulty.lowercase()) {
